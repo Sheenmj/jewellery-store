@@ -3,7 +3,7 @@
 import React, {
   createContext,
   useContext,
-  useState,
+  useReducer,
   useEffect,
   useCallback,
   type ReactNode,
@@ -11,8 +11,18 @@ import React, {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type WishlistState = {
+  wishlist: string[];
+  mounted: boolean;
+};
+
+type WishlistAction =
+  | { type: "HYDRATE"; items: string[] }
+  | { type: "TOGGLE"; productId: string }
+  | { type: "REMOVE"; productId: string };
+
 type WishlistContextValue = {
-  wishlist: string[]; // array of productIds
+  wishlist: string[];
   wishlistCount: number;
   isWishlisted: (productId: string) => boolean;
   toggle: (productId: string) => void;
@@ -20,66 +30,103 @@ type WishlistContextValue = {
   mounted: boolean;
 };
 
+// ─── Reducer ──────────────────────────────────────────────────────────────────
+
+function wishlistReducer(
+  state: WishlistState,
+  action: WishlistAction
+): WishlistState {
+  switch (action.type) {
+    case "HYDRATE":
+      return { wishlist: action.items, mounted: true };
+    case "TOGGLE": {
+      const exists = state.wishlist.includes(action.productId);
+      return {
+        ...state,
+        wishlist: exists
+          ? state.wishlist.filter((id) => id !== action.productId)
+          : [...state.wishlist, action.productId],
+      };
+    }
+    case "REMOVE":
+      return {
+        ...state,
+        wishlist: state.wishlist.filter((id) => id !== action.productId),
+      };
+    default:
+      return state;
+  }
+}
+
 // ─── Context ─────────────────────────────────────────────────────────────────
 
 const WishlistContext = createContext<WishlistContextValue | null>(null);
 
 const STORAGE_KEY = "aura-wishlist";
 
-export function WishlistProvider({ children }: { children: ReactNode }) {
-  const [wishlist, setWishlist] = useState<string[]>([]);
-  const [mounted, setMounted] = useState(false);
-
-  // Hydrate from localStorage once on client
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setWishlist(parsed);
+function loadWishlistFromStorage(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((id): id is string => typeof id === "string");
       }
-    } catch {
-      // ignore
     }
-    setMounted(true);
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveWishlistToStorage(items: string[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // ignore
+  }
+}
+
+export function WishlistProvider({ children }: { children: ReactNode }) {
+  const [state, dispatch] = useReducer(wishlistReducer, {
+    wishlist: [],
+    mounted: false,
+  });
+
+  // Hydrate once on mount
+  useEffect(() => {
+    dispatch({ type: "HYDRATE", items: loadWishlistFromStorage() });
   }, []);
 
-  // Persist on change
+  // Persist on change (only after mounted)
   useEffect(() => {
-    if (!mounted) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(wishlist));
-    } catch {
-      // ignore
+    if (state.mounted) {
+      saveWishlistToStorage(state.wishlist);
     }
-  }, [wishlist, mounted]);
+  }, [state.wishlist, state.mounted]);
 
   const isWishlisted = useCallback(
-    (productId: string) => wishlist.includes(productId),
-    [wishlist]
+    (productId: string) => state.wishlist.includes(productId),
+    [state.wishlist]
   );
 
   const toggle = useCallback((productId: string) => {
-    setWishlist((prev) =>
-      prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId]
-    );
+    dispatch({ type: "TOGGLE", productId });
   }, []);
 
   const remove = useCallback((productId: string) => {
-    setWishlist((prev) => prev.filter((id) => id !== productId));
+    dispatch({ type: "REMOVE", productId });
   }, []);
 
   return (
     <WishlistContext.Provider
       value={{
-        wishlist,
-        wishlistCount: wishlist.length,
+        wishlist: state.wishlist,
+        wishlistCount: state.wishlist.length,
         isWishlisted,
         toggle,
         remove,
-        mounted,
+        mounted: state.mounted,
       }}
     >
       {children}
