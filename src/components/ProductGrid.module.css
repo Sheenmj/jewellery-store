@@ -1,0 +1,41 @@
+.grid {
+  display: grid;
+  gap: var(--space-6);
+  list-style: none;
+}
+
+/* 4-column default */
+.grid[data-columns="4"] {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* 3-column */
+.grid[data-columns="3"] {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* 2-column */
+.grid[data-columns="2"] {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 1024px) {
+  .grid[data-columns="4"] {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .grid[data-columns="4"],
+  .grid[data-columns="3"] {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .grid[data-columns="4"],
+  .grid[data-columns="3"],
+  .grid[data-columns="2"] {
+    grid-template-columns: 1fr;
+  }
+}
